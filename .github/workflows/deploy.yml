@@ -84,11 +84,37 @@ jobs:
         username: ${{ secrets.VPS_USER }}
         key: ${{ secrets.VPS_SSH_KEY }}
         script: |
+          # Ensure Docker is running
+          sudo systemctl start docker || echo "Docker already running"
+          
           # Navigate to application directory
           cd /opt/byteforce-test
           
+          # Create docker-compose.yml if it doesn't exist
+          if [ ! -f docker-compose.yml ]; then
+            cat > docker-compose.yml << 'EOF'
+          version: '3.8'
+          
+          services:
+            app:
+              image: ghcr.io/davechpn/byteforce-test:latest
+              ports:
+                - "3000:3000"
+              environment:
+                - NODE_ENV=production
+                - PORT=3000
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+                interval: 30s
+                timeout: 10s
+                retries: 3
+                start_period: 40s
+          EOF
+          fi
+          
           # Stop the current container
-          docker-compose down
+          docker-compose down || echo "No containers to stop"
           
           # Login to GitHub Container Registry
           echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
